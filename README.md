@@ -30,7 +30,14 @@ kube-proxy runs in `nftables` mode? Everything runs on a throwaway kind cluster;
    (copied here as `iptables-wrapper.from-image-1.27.1`) picks `nft` when kubelet's `KUBE-IPTABLES-HINT` or `KUBE-KUBELET-CANARY` chain exists
    in the nft mangle table, else `legacy` if they exist in legacy, else whichever backend has more rules (nft on a tie).
 
+8. **Image 1.26.8 (the version named in the issue)** gave the same A/B result on the nft backend: with rules node-local +20 / CoreDNS +2, raw table flushed +0 / +20, rules back after about 50 s.
+9. **iptables-legacy host with an nftables kube-proxy.** `legacy-host.sh` switches the worker's `iptables` alternatives to legacy, removes the
+   nft copies of kubelet's canary chains and restarts kubelet so they are recreated in the legacy tables. The wrapper then chose legacy
+   (container: `iptables v1.8.9 (legacy)`), node-cache wrote its 16 raw-table rules to the legacy table (none in the nft table), and the A/B
+   result was the same for both 1.26.8 and 1.27.1: with rules +20 / +2, raw table flushed +0 / +20, rules restored after about 65 s. No conntrack entries
+   for DNS to 10.96.0.10. Deleting the DaemonSet removed the legacy rules (raw and filter 0) and the dummy interface, and queries went back to CoreDNS.
+   Note this is one kind node switched to legacy, with kindnet and kube-proxy still writing nft rules next to it; it is not a distro that ships legacy.
+
 ## Not tested
-iptables-legacy hosts (the wrapper choosing `legacy` next to an nftables kube-proxy), image 1.26.8 (the version named in the issue),
-the teardown ordering from #690, IPv6/dual-stack, other CNIs, multi-node DNS from other nodes, kube-proxy restarts during a run.
-One environment. The with-rules measurement was taken three times (+100/+4 over 20 queries, then +20/+2 twice over 10), the without-rules measurement once.
+The teardown ordering from #690, IPv6/dual-stack, other CNIs, multi-node DNS from other nodes, kube-proxy restarts during a run.
+One environment. The 1.27.1 nft-backend with-rules measurement was taken three times (+100/+4 over 20 queries, then +20/+2 twice over 10), the without-rules measurement once; the other combinations once each.
